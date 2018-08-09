@@ -76,6 +76,7 @@ using namespace std;
 
 int validateImage(const char* f1, const char* f2, double threshold, const char* targetFile, char *options);
 bool shouldUse(MetricId, char* options);
+bool shouldSkipMetric(MetricId, char* options, bool isFixedImageEmpty, bool isMovingImageEmpty);
 std::string getOptions(MetricId id, char* options);
 bool isUrl(const char* path);
 void testHausdorf(ImageType::Pointer truthImg, ImageType::Pointer testImg, double threshold, bool fuzzy, MetricId metricId, itk::DOMNode::Pointer xmlObject, int option, VoxelPreprocessor *);
@@ -140,17 +141,16 @@ int validateImage(const char* f1, const char* f2, double threshold, const char* 
 		pushMessage(message.str().c_str(), targetFile, f1, f2);
 		return 0;
 	}
-	if(voxelPreprocessor->IsFixedImageEmpty()){
-		std::ostringstream  message;
-		message << "Fixed image is empty!" ;
-		pushMessage(message.str().c_str(), targetFile, f1, f2);
-		return 0;
-	}
-	if(voxelPreprocessor->IsMovingImageEmpty()){
+
+	bool isFixedImageEmpty = voxelPreprocessor->IsFixedImageEmpty();
+	bool isMovingImageEmpty = voxelPreprocessor->IsMovingImageEmpty();
+
+	// allow fixed image to be empty for false detection
+	if (!isFixedImageEmpty && isMovingImageEmpty) {
 		std::ostringstream  message;
 		message << "Moving image is empty!" ;
 		pushMessage(message.str().c_str(), targetFile, f1, f2);
-		return 0;
+		return 0;	
 	}
 
 #ifdef _DEBUG
@@ -285,13 +285,16 @@ int validateImage(const char* f1, const char* f2, double threshold, const char* 
 
 	metricId = AVGDIST;
 	if(shouldUse(metricId, options)){
-	    clock_t t = clock();
-        long long s1= ((double)t*1000)/CLOCKS_PER_SEC;	
-		AverageDistanceMetric *averageDistanceMetric = new AverageDistanceMetric(truthImg, testImg, fuzzy, threshold, use_millimeter);
-		value =  averageDistanceMetric->CalcAverageDistace(false);
-	    t = clock();
-        long long s2= ((double)t*1000)/CLOCKS_PER_SEC;	
-		int milliseconds =  (s2-s1);
+		int milliseconds = 0;
+		if (!shouldSkipMetric(metricId, options, isFixedImageEmpty, isMovingImageEmpty)) {
+			clock_t t = clock();
+			long long s1 = ((double)t * 1000) / CLOCKS_PER_SEC;
+			AverageDistanceMetric *averageDistanceMetric = new AverageDistanceMetric(truthImg, testImg, fuzzy, threshold, use_millimeter);
+			value = averageDistanceMetric->CalcAverageDistace(false);
+			t = clock();
+			long long s2 = ((double)t * 1000) / CLOCKS_PER_SEC;
+			milliseconds = (s2 - s1);
+		}
 		if(use_millimeter){
 		    pushValue(metricId, value, milliseconds, xmlObject, "millimeter");
 		}
@@ -303,9 +306,11 @@ int validateImage(const char* f1, const char* f2, double threshold, const char* 
 
 	metricId = MAHLNBS;
 	if(shouldUse(metricId, options)){
-		MahalanobisDistanceMetric *mahalanobisDistance = new MahalanobisDistanceMetric(truthImg, testImg, voxelPreprocessor, fuzzy, threshold);
-		value =  mahalanobisDistance->CalcMahalanobisDistace();
-		pushValue(metricId, value, xmlObject,false, NULL);
+		if (!shouldSkipMetric(metricId, options, isFixedImageEmpty, isMovingImageEmpty)) {
+			MahalanobisDistanceMetric *mahalanobisDistance = new MahalanobisDistanceMetric(truthImg, testImg, voxelPreprocessor, fuzzy, threshold);
+			value = mahalanobisDistance->CalcMahalanobisDistace();
+		}
+		pushValue(metricId, value, xmlObject, false, NULL);
 	}
 	metricId = VARINFO;
 	if(shouldUse(metricId, options)){
@@ -520,6 +525,16 @@ ImageType::Pointer loadImage( const char* filename, bool useStreamingFilter){
 
 }
 
+bool shouldSkipMetric(MetricId id, char* options, bool isFixedImageEmpty, bool isMovingImageEmpty) {
+	switch (id)
+	{
+		case MAHLNBS:
+		case AVGDIST:
+			return isFixedImageEmpty || isMovingImageEmpty;
+		default:
+			return false;
+	}
+}
 
 
 #endif
