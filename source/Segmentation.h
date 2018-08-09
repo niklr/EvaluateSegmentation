@@ -145,14 +145,6 @@ int validateImage(const char* f1, const char* f2, double threshold, const char* 
 	bool isFixedImageEmpty = voxelPreprocessor->IsFixedImageEmpty();
 	bool isMovingImageEmpty = voxelPreprocessor->IsMovingImageEmpty();
 
-	// allow fixed image to be empty for false detection
-	if (!isFixedImageEmpty && isMovingImageEmpty) {
-		std::ostringstream  message;
-		message << "Moving image is empty!" ;
-		pushMessage(message.str().c_str(), targetFile, f1, f2);
-		return 0;	
-	}
-
 #ifdef _DEBUG
 	string opt = options;
 	int ind1 = opt.find("TESTMETRICS");
